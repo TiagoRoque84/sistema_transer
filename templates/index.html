@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transer Manager | Python</title>
+    <title>Transer Manager 5.0</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
@@ -17,6 +17,7 @@
         .login-box { width: 400px; margin: 80px auto; padding: 40px; background: white; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
         .btn-success { background-color: #10b981; border: none; }
         .btn-success:hover { background-color: #059669; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
@@ -29,7 +30,11 @@
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                        <div class="alert alert-danger">{{ message }}</div>
+                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show shadow-sm">
+                            <i class="bi {{ 'bi-exclamation-triangle-fill' if category == 'error' else 'bi-check-circle-fill' }} me-2"></i>
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
                     {% endfor %}
                 {% endif %}
             {% endwith %}
@@ -44,7 +49,7 @@
                 </div>
                 <button type="submit" class="btn btn-success w-100 py-3 fw-bold rounded-pill shadow-sm">ENTRAR NO SISTEMA</button>
             </form>
-            <p class="mt-4 text-muted small">Versão Python Local v3.0</p>
+            <p class="mt-4 text-muted small">Versão 5.0 (Filtros e Edição)</p>
         </div>
     </div>
     {% else %}
@@ -103,12 +108,146 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card p-4 border-start border-5 border-info h-100" style="cursor:pointer;" onclick="window.location='/reports'">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div><h5 class="fw-bold text-dark">Relatórios</h5><p class="text-muted mb-0 small">Ver histórico</p></div>
-                        <i class="bi bi-bar-chart text-info fs-1"></i>
-                    </div>
+        </div>
+        {% endif %}
+
+        <!-- CLIENTES -->
+        {% if view == 'clients' %}
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="fw-bold text-dark">Gerenciar Clientes</h2>
+            <button class="btn btn-success px-4 rounded-pill fw-bold shadow-sm" onclick="openNewClientModal()">
+                <i class="bi bi-plus-lg me-2"></i>Novo Cliente
+            </button>
+        </div>
+
+        <!-- Filtro de Clientes -->
+        <div class="mb-3">
+            <input type="text" id="clientSearch" class="form-control p-3" placeholder="🔍 Buscar cliente por nome ou ID..." onkeyup="filterClients()">
+        </div>
+
+        <div class="card p-0 overflow-hidden shadow-sm">
+            <table class="table table-hover mb-0 align-middle" id="clientsTable">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="p-3">ID (CSV)</th>
+                        <th class="p-3">Cliente</th>
+                        <th class="p-3">Tipo</th>
+                        <th class="p-3">Contrato</th>
+                        <th class="p-3 text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in clients %}
+                    <tr>
+                        <td class="p-3 fw-bold text-primary font-monospace">{{ c.external_id or '-' }}</td>
+                        <td class="p-3 fw-bold text-dark">{{ c.name }}</td>
+                        <td class="p-3">
+                            {% if c.type == 'standard' %}<span class="badge bg-secondary">Padrão (Pacote)</span>{% endif %}
+                            {% if c.type == 'master' %}<span class="badge bg-primary">Matriz/Prefeitura</span>{% endif %}
+                            {% if c.type == 'child' %}<span class="badge bg-info text-dark">Ponto de Coleta</span>{% endif %}
+                            {% if c.type == 'kg_private' %}<span class="badge bg-warning text-dark">Particular (Kg)</span>{% endif %}
+                        </td>
+                        <td class="p-3">
+                            {% if c.type == 'master' or c.type == 'kg_private' %} R$ {{ c.price_kg }}/Kg {% endif %}
+                            {% if c.type == 'standard' %} R$ {{ c.contract_val }} ({{ c.contract_limit }}kg) {% endif %}
+                            {% if c.type == 'child' %} <span class="text-muted small">Vinculado</span> {% endif %}
+                            <br><small class="text-muted">{{ c.periodicity }}</small>
+                        </td>
+                        <td class="p-3 text-end">
+                            <!-- Botão Editar -->
+                            <button class="btn btn-sm btn-link text-primary p-0 me-2" onclick='editClient({{ c|tojson }})'>
+                                <i class="bi bi-pencil-square fs-5"></i>
+                            </button>
+                            <!-- Botão Deletar -->
+                            <button class="btn btn-sm btn-link text-danger p-0" onclick="if(confirm('Remover cliente?')) window.location.href='/delete_client/{{ c.id }}'">
+                                <i class="bi bi-trash fs-5"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Modal Cliente Inteligente -->
+        <div class="modal fade" id="clientModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content border-0 shadow-lg">
+                    <form action="/clients" method="POST" id="clientForm">
+                        <input type="hidden" name="client_id" id="clientId">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title fw-bold" id="modalTitle">Novo Cliente</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            
+                            <!-- TIPO DE CLIENTE -->
+                            <div class="mb-4 p-3 bg-light rounded border">
+                                <label class="fw-bold mb-2">Tipo de Cadastro:</label>
+                                <select name="type" id="clientType" class="form-select fw-bold" onchange="toggleFields()">
+                                    <option value="standard">Cliente Padrão (Tem pacote mensal/trimestral)</option>
+                                    <option value="kg_private">Cliente Particular (Pagamento por Kg)</option>
+                                    <option value="master">Prefeitura / Matriz (Paga por Kg, agrupa pontos)</option>
+                                    <option value="child">Ponto de Coleta (Pertence a uma Prefeitura)</option>
+                                </select>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <label class="form-label fw-bold small text-muted">Nome / Razão Social</label>
+                                    <input type="text" name="name" id="cName" class="form-control" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold small text-primary">ID no CSV</label>
+                                    <input type="text" name="external_id" id="cExtId" class="form-control border-primary" placeholder="Ex: 116">
+                                </div>
+                                
+                                <!-- CAMPO PARENTE (Só para Child) -->
+                                <div class="col-12 hidden" id="parentField">
+                                    <label class="form-label fw-bold text-danger">Pertence à Prefeitura/Grupo:</label>
+                                    <select name="parent_id" id="cParent" class="form-select border-danger">
+                                        <option value="">Selecione...</option>
+                                        {% for p in parents %}
+                                        <option value="{{ p.id }}">{{ p.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <!-- DADOS COMUNS -->
+                                <div class="col-md-6"><label class="form-label small text-muted">CPF/CNPJ</label><input type="text" name="document" id="cDoc" class="form-control"></div>
+                                <div class="col-md-6"><label class="form-label small text-muted">Email</label><input type="email" name="email" id="cEmail" class="form-control"></div>
+                                <div class="col-12"><label class="form-label small text-muted">Endereço</label><input type="text" name="address" id="cAddr" class="form-control"></div>
+                                <div class="col-md-6"><label class="form-label small text-muted">Cidade</label><input type="text" name="city" id="cCity" class="form-control"></div>
+                                <div class="col-md-6"><label class="form-label small text-muted">Nº Contrato</label><input type="text" name="contract_num" id="cContr" class="form-control"></div>
+                                
+                                <div class="col-12 border-top mt-4 pt-3 mb-2"><span class="badge bg-secondary">Financeiro</span></div>
+                                
+                                <!-- FINANCEIRO PADRÃO -->
+                                <div id="standardFinance" class="row g-3">
+                                    <div class="col-md-4"><label class="form-label small fw-bold">Valor Pacote (R$)</label><input type="number" step="0.01" name="contract_val" id="cVal" class="form-control"></div>
+                                    <div class="col-md-4"><label class="form-label small fw-bold">Limite (Kg)</label><input type="number" step="0.01" name="contract_limit" id="cLim" class="form-control"></div>
+                                    <div class="col-md-4"><label class="form-label small fw-bold">Valor Extra (R$)</label><input type="number" step="0.01" name="extra_val" id="cExtra" class="form-control"></div>
+                                </div>
+
+                                <!-- FINANCEIRO KG (Prefeitura ou Particular Kg) -->
+                                <div id="masterFinance" class="row g-3 hidden">
+                                    <div class="col-md-6"><label class="form-label small fw-bold text-primary">Preço por Kg (R$)</label><input type="number" step="0.01" name="price_kg" id="cPkg" class="form-control border-primary bg-light"></div>
+                                    <div class="col-md-6 d-flex align-items-end"><small class="text-muted">Cobrança integral por peso (sem franquia).</small></div>
+                                </div>
+
+                                <div class="col-12 mt-3">
+                                    <label class="form-label small text-muted">Periodicidade</label>
+                                    <select name="periodicity" id="cPeriod" class="form-select">
+                                        <option>Mensal</option><option>Trimestral</option><option>Semestral</option><option>Semanal</option><option>Quinzenal</option><option>Ocasional</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light">
+                            <button type="button" class="btn btn-link text-muted" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success fw-bold px-4">Salvar</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -159,30 +298,14 @@
         <!-- RELATÓRIOS -->
         {% if view == 'reports' %}
         <h2 class="fw-bold text-dark mb-4">Relatórios Gerenciais</h2>
-        
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card p-3 bg-primary text-white">
-                    <h3>{{ stats.total }}</h3>
-                    <span>Clientes Cadastrados</span>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card p-3 bg-success text-white">
-                    <h3>R$ {{ stats.val }}</h3>
-                    <span>Valor Mensal em Contratos</span>
-                </div>
-            </div>
-        </div>
-
+        <div class="alert alert-info">Em breve: gráficos detalhados.</div>
         <div class="card p-0 shadow-sm">
             <div class="card-header bg-light fw-bold">Lista de Clientes Ativos</div>
             <table class="table table-hover mb-0">
-                <thead><tr><th class="p-3">Data Cadastro</th><th class="p-3">Cliente</th><th class="p-3">Contrato</th><th class="p-3">Valor</th></tr></thead>
+                <thead><tr><th class="p-3">Cliente</th><th class="p-3">Contrato</th><th class="p-3">Valor</th></tr></thead>
                 <tbody>
                     {% for c in clients %}
                     <tr>
-                        <td class="p-3">{{ c.created_at or '-' }}</td>
                         <td class="p-3">{{ c.name }}</td>
                         <td class="p-3">{{ c.contract_num }}</td>
                         <td class="p-3">R$ {{ c.contract_val }}</td>
@@ -190,95 +313,6 @@
                     {% endfor %}
                 </tbody>
             </table>
-        </div>
-        {% endif %}
-
-        <!-- CLIENTES -->
-        {% if view == 'clients' %}
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="fw-bold text-dark">Gerenciar Clientes</h2>
-            <button class="btn btn-success px-4 rounded-pill fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#clientModal">
-                <i class="bi bi-plus-lg me-2"></i>Novo Cliente
-            </button>
-        </div>
-
-        <div class="card p-0 overflow-hidden shadow-sm">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="bg-light">
-                    <tr>
-                        <th class="p-3 text-secondary small text-uppercase">ID (CSV)</th>
-                        <th class="p-3 text-secondary small text-uppercase">Cliente</th>
-                        <th class="p-3 text-secondary small text-uppercase">Contrato</th>
-                        <th class="p-3 text-secondary small text-uppercase">Pacote</th>
-                        <th class="p-3 text-secondary small text-uppercase text-end">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if not clients %}
-                    <tr><td colspan="5" class="text-center p-5 text-muted">Nenhum cliente cadastrado ainda.</td></tr>
-                    {% endif %}
-                    {% for c in clients %}
-                    <tr>
-                        <td class="p-3 fw-bold text-primary font-monospace">{{ c.external_id }}</td>
-                        <td class="p-3 fw-bold text-dark">{{ c.name }}</td>
-                        <td class="p-3 text-muted">{{ c.contract_num }}</td>
-                        <td class="p-3"><span class="badge bg-light text-dark border">{{ c.contract_limit }}kg</span> <span class="text-success fw-bold small">R$ {{ c.contract_val }}</span></td>
-                        <td class="p-3 text-end">
-                            <button class="btn btn-sm btn-link text-danger p-0" onclick="if(confirm('Remover cliente?')) window.location.href='/delete_client/{{ c.id }}'">
-                                <i class="bi bi-trash fs-5"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Modal Cliente -->
-        <div class="modal fade" id="clientModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content border-0 shadow-lg">
-                    <form action="/clients" method="POST">
-                        <div class="modal-header bg-success text-white">
-                            <h5 class="modal-title fw-bold">Novo Cliente</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body p-4">
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <label class="form-label fw-bold small text-muted">Nome / Razão Social</label>
-                                    <input type="text" name="name" class="form-control bg-light" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label fw-bold small text-primary">ID no CSV (Meu Resíduo)</label>
-                                    <input type="text" name="external_id" class="form-control border-primary bg-light" placeholder="Ex: 116" required>
-                                </div>
-                                <div class="col-md-6"><label class="form-label small text-muted">CPF/CNPJ</label><input type="text" name="document" class="form-control"></div>
-                                <div class="col-md-6"><label class="form-label small text-muted">Email</label><input type="email" name="email" class="form-control"></div>
-                                <div class="col-12"><label class="form-label small text-muted">Endereço</label><input type="text" name="address" class="form-control"></div>
-                                <div class="col-md-6"><label class="form-label small text-muted">Cidade</label><input type="text" name="city" class="form-control"></div>
-                                <div class="col-md-6"><label class="form-label small text-muted">Nº Contrato</label><input type="text" name="contract_num" class="form-control"></div>
-                                
-                                <div class="col-12 border-top mt-4 pt-3 mb-2"><span class="badge bg-secondary">Financeiro</span></div>
-                                
-                                <div class="col-md-4"><label class="form-label small fw-bold">Valor Pacote (R$)</label><input type="number" step="0.01" name="contract_val" class="form-control" required></div>
-                                <div class="col-md-4"><label class="form-label small fw-bold">Limite (Kg)</label><input type="number" step="0.01" name="contract_limit" class="form-control" required></div>
-                                <div class="col-md-4"><label class="form-label small fw-bold">Valor Extra (R$)</label><input type="number" step="0.01" name="extra_val" class="form-control" required></div>
-                                <div class="col-12">
-                                    <label class="form-label small text-muted">Periodicidade</label>
-                                    <select name="periodicity" class="form-select">
-                                        <option>Mensal</option><option>Semanal</option><option>Quinzenal</option><option>Trimestral</option><option>Semestral</option><option>Ocasional</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer bg-light">
-                            <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-success fw-bold px-4">Salvar Cliente</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
         </div>
         {% endif %}
 
@@ -290,10 +324,9 @@
             <form action="/closing" method="POST" enctype="multipart/form-data">
                 <i class="bi bi-cloud-arrow-up text-primary" style="font-size: 4rem;"></i>
                 <h4 class="mt-3 text-dark fw-bold">Upload do Relatório</h4>
-                <p class="text-muted mb-4">Selecione o arquivo CSV gerado pelo sistema "Meu Resíduo"</p>
-                
+                <p class="text-muted mb-4">Selecione o arquivo CSV ou Excel</p>
                 <div class="d-flex justify-content-center">
-                    <input type="file" name="file" class="form-control w-50" accept=".csv" required>
+                    <input type="file" name="file" class="form-control w-50" accept=".csv, .xlsx" required>
                 </div>
                 <button type="submit" class="btn btn-primary mt-3 px-5 fw-bold rounded-pill shadow-sm">Processar Arquivo</button>
             </form>
@@ -302,16 +335,16 @@
         {% if processed %}
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4 class="fw-bold text-dark">Resultados Processados</h4>
-            <span class="badge bg-light text-dark border">{{ processed|length }} clientes encontrados</span>
+            <span class="badge bg-light text-dark border">{{ processed|length }} faturas geradas</span>
         </div>
         
         <div class="card p-0 overflow-hidden shadow-sm">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="bg-light">
                     <tr>
-                        <th class="p-3 ps-4">Cliente</th>
+                        <th class="p-3 ps-4">Cliente / Prefeitura</th>
                         <th class="p-3 text-center">Total Kg</th>
-                        <th class="p-3 text-center">Excedente</th>
+                        <th class="p-3 text-center">Detalhes</th>
                         <th class="p-3">Valor Final</th>
                         <th class="p-3 text-end pe-4">Ação</th>
                     </tr>
@@ -320,28 +353,32 @@
                     {% for item in processed %}
                     <tr>
                         <td class="p-3 ps-4">
-                            <div class="fw-bold text-dark">{{ item.name }}</div>
-                            <small class="text-muted font-monospace">ID: {{ item.id }}</small>
+                            <div class="fw-bold text-dark">{{ item.client_db.name }}</div>
+                            <small class="text-muted font-monospace">
+                                {% if item.client_db.type == 'master' %} [PREFEITURA/GRUPO] 
+                                {% elif item.client_db.type == 'kg_private' %} [PARTICULAR KG]
+                                {% else %} [ID: {{ item.id }}] {% endif %}
+                            </small>
                             {% if item.status != 'OK' %} <span class="badge bg-danger ms-2">Não Cadastrado</span> {% endif %}
                         </td>
                         <td class="p-3 text-center fw-bold">{{ item.total_kg }} Kg</td>
                         <td class="p-3 text-center">
-                            {% if item.excess > 0 %}
+                            {% if item.client_db.type == 'master' %}
+                                <span class="badge bg-info text-dark">{{ item.coletas|length }} Pontos</span>
+                            {% elif item.excess > 0 %}
                                 <span class="badge bg-danger-subtle text-danger fw-bold">+ {{ item.excess }} Kg</span>
                             {% else %}
                                 <span class="text-muted">-</span>
                             {% endif %}
                         </td>
-                        <td class="p-3 fw-bold text-success fs-5">R$ {{ item.total_final }}</td>
+                        <td class="p-3 fw-bold text-success fs-5">R$ {{ "%.2f"|format(item.total_val) }}</td>
                         <td class="p-3 text-end pe-4">
                             {% if item.status == 'OK' %}
                             <button class="btn btn-primary btn-sm px-3 fw-bold rounded-pill shadow-sm" onclick='downloadExcel({{ item|tojson }})'>
-                                <i class="bi bi-file-earmark-excel me-1"></i> Baixar Excel
+                                <i class="bi bi-file-earmark-excel me-1"></i> Excel
                             </button>
                             {% else %}
-                            <button class="btn btn-outline-secondary btn-sm px-3 rounded-pill" onclick="alert('Cadastre este cliente na aba Clientes com o ID {{ item.id }} para poder gerar o Excel.')">
-                                <i class="bi bi-plus-lg me-1"></i> Cadastrar
-                            </button>
+                            <button class="btn btn-outline-secondary btn-sm px-3 rounded-pill" disabled>Cadastrar 1º</button>
                             {% endif %}
                         </td>
                     </tr>
@@ -353,15 +390,95 @@
         {% endif %}
 
     </div>
-    {% endif %} <!-- Fechamento do IF do login -->
+    {% endif %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // FUNÇÃO PARA FILTRAR CLIENTES
+        function filterClients() {
+            var input, filter, table, tr, td, i, txtValue;
+            input = document.getElementById("clientSearch");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("clientsTable");
+            tr = table.getElementsByTagName("tr");
+
+            for (i = 1; i < tr.length; i++) {
+                tdName = tr[i].getElementsByTagName("td")[1];
+                tdId = tr[i].getElementsByTagName("td")[0];
+                if (tdName || tdId) {
+                    txtValueName = tdName.textContent || tdName.innerText;
+                    txtValueId = tdId.textContent || tdId.innerText;
+                    if (txtValueName.toUpperCase().indexOf(filter) > -1 || txtValueId.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
+
+        // FUNÇÃO PARA ABRIR MODAL VAZIO (NOVO)
+        function openNewClientModal() {
+            document.getElementById('clientForm').reset();
+            document.getElementById('clientId').value = '';
+            document.getElementById('modalTitle').innerText = 'Novo Cliente';
+            // Reseta select e campos
+            document.getElementById('clientType').value = 'standard';
+            toggleFields();
+            var modal = new bootstrap.Modal(document.getElementById('clientModal'));
+            modal.show();
+        }
+
+        // FUNÇÃO PARA ABRIR MODAL PREENCHIDO (EDITAR)
+        function editClient(data) {
+            document.getElementById('modalTitle').innerText = 'Editar Cliente';
+            document.getElementById('clientId').value = data.id;
+            document.getElementById('cName').value = data.name;
+            document.getElementById('cExtId').value = data.external_id;
+            document.getElementById('cDoc').value = data.document;
+            document.getElementById('cEmail').value = data.email;
+            document.getElementById('cAddr').value = data.address;
+            document.getElementById('cCity').value = data.city;
+            document.getElementById('cContr').value = data.contract_num;
+            document.getElementById('cVal').value = data.contract_val;
+            document.getElementById('cLim').value = data.contract_limit;
+            document.getElementById('cExtra').value = data.extra_val;
+            document.getElementById('cPkg').value = data.price_kg;
+            document.getElementById('cPeriod').value = data.periodicity;
+            
+            // Ajusta selects
+            document.getElementById('clientType').value = data.type || 'standard';
+            if(data.parent_id) document.getElementById('cParent').value = data.parent_id;
+
+            toggleFields();
+            var modal = new bootstrap.Modal(document.getElementById('clientModal'));
+            modal.show();
+        }
+
+        function toggleFields() {
+            const type = document.getElementById('clientType').value;
+            const standardDiv = document.getElementById('standardFinance');
+            const masterDiv = document.getElementById('masterFinance');
+            const parentDiv = document.getElementById('parentField');
+
+            standardDiv.classList.add('hidden');
+            masterDiv.classList.add('hidden');
+            parentDiv.classList.add('hidden');
+
+            if (type === 'standard') {
+                standardDiv.classList.remove('hidden');
+            } else if (type === 'master' || type === 'kg_private') {
+                masterDiv.classList.remove('hidden');
+            } else if (type === 'child') {
+                parentDiv.classList.remove('hidden');
+            }
+        }
+
         function downloadExcel(data) {
             fetch('/generate_excel', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ client: data.db_data, coletas: data.coletas })
+                body: JSON.stringify({ client: data.client_db, coletas: data.items })
             })
             .then(res => {
                 if(res.ok) return res.blob();
@@ -371,7 +488,7 @@
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `Fechamento_${data.name}.xlsx`;
+                a.download = `Fechamento_${data.client_db.name}.xlsx`;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
