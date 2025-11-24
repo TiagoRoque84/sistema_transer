@@ -1,53 +1,49 @@
 import os
-import sqlite3
-import pandas as pd
+import sys
+import time
+from threading import Timer
+import webbrowser
+
+# --- MARCADOR VISUAL ---
+print("\n" + "="*60)
+print(">>> VERSÃO CORRIGIDA: AJUSTE DE CABEÇALHO (LINHA 2) <<<")
+print("="*60 + "\n")
+
+# --- TESTE DE BIBLIOTECAS ---
+try:
+    import flask
+    import pandas as pd
+    import openpyxl
+    import sqlite3
+    print(">>> BIBLIOTECAS OK.")
+except ImportError as e:
+    print(f"\n>>> ERRO: Falta {e.name}. Rode: pip install {e.name}\n")
+    sys.exit(1)
+
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, flash
 from io import BytesIO
 from datetime import datetime
-import webbrowser
-from threading import Timer
 
 app = Flask(__name__)
 app.secret_key = 'transer_segredo_total'
 DB_NAME = 'transer.db'
 
-# --- BANCO DE DADOS ---
+# Configuração da pasta temporária
+UPLOAD_FOLDER = os.path.join(os.getcwd(), 'temp_uploads')
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS clients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                external_id TEXT NOT NULL UNIQUE,
-                document TEXT,
-                address TEXT,
-                city TEXT,
-                email TEXT,
-                contract_num TEXT,
-                contract_val REAL,
-                contract_limit REAL,
-                extra_val REAL,
-                periodicity TEXT,
-                created_at TEXT
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                password TEXT,
-                role TEXT,
-                name TEXT
-            )
-        ''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, external_id TEXT NOT NULL UNIQUE, document TEXT, address TEXT, city TEXT, email TEXT, contract_num TEXT, contract_val REAL, contract_limit REAL, extra_val REAL, periodicity TEXT, created_at TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, role TEXT, name TEXT)''')
         cursor.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cursor.fetchone():
-            cursor.execute("INSERT INTO users (username, password, role, name) VALUES (?, ?, ?, ?)",
-                           ('admin', 'admambiental', 'admin', 'Administrador Padrão'))
+            cursor.execute("INSERT INTO users (username, password, role, name) VALUES (?, ?, ?, ?)", ('admin', 'admambiental', 'admin', 'Admin Padrão'))
         conn.commit()
 
-# --- ROTAS ---
 @app.route('/')
 def index():
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -79,12 +75,10 @@ def clients():
             with sqlite3.connect(DB_NAME) as conn:
                 now = datetime.now().strftime("%Y-%m-%d")
                 if d.get('client_id'):
-                    conn.execute('UPDATE clients SET name=?, external_id=?, document=?, address=?, city=?, email=?, contract_num=?, contract_val=?, contract_limit=?, extra_val=?, periodicity=? WHERE id=?',
-                                 (d['name'], d['external_id'], d['document'], d['address'], d['city'], d['email'], d['contract_num'], d['contract_val'], d['contract_limit'], d['extra_val'], d['periodicity'], d['client_id']))
+                    conn.execute('UPDATE clients SET name=?, external_id=?, document=?, address=?, city=?, email=?, contract_num=?, contract_val=?, contract_limit=?, extra_val=?, periodicity=? WHERE id=?', (d['name'], d['external_id'], d['document'], d['address'], d['city'], d['email'], d['contract_num'], d['contract_val'], d['contract_limit'], d['extra_val'], d['periodicity'], d['client_id']))
                     flash('Atualizado!', 'success')
                 else:
-                    conn.execute('INSERT INTO clients (name, external_id, document, address, city, email, contract_num, contract_val, contract_limit, extra_val, periodicity, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                                 (d['name'], d['external_id'], d['document'], d['address'], d['city'], d['email'], d['contract_num'], d['contract_val'], d['contract_limit'], d['extra_val'], d['periodicity'], now))
+                    conn.execute('INSERT INTO clients (name, external_id, document, address, city, email, contract_num, contract_val, contract_limit, extra_val, periodicity, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', (d['name'], d['external_id'], d['document'], d['address'], d['city'], d['email'], d['contract_num'], d['contract_val'], d['contract_limit'], d['extra_val'], d['periodicity'], now))
                     flash('Cadastrado!', 'success')
         except Exception as e: flash(f'Erro: {e}', 'error')
     with sqlite3.connect(DB_NAME) as conn:
@@ -126,7 +120,7 @@ def reports():
         stats = {'total': len(clients), 'val': sum(c['contract_val'] or 0 for c in clients)}
     return render_template('index.html', view='reports', clients=clients, stats=stats, user=session.get('user_name'), role=session.get('role'))
 
-# --- FECHAMENTO (MÉTODO SALVAR EM DISCO) ---
+# --- FECHAMENTO INTELIGENTE ---
 @app.route('/closing', methods=['GET', 'POST'])
 def closing():
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -135,28 +129,46 @@ def closing():
     if request.method == 'POST' and 'file' in request.files:
         file = request.files['file']
         if file.filename:
-            # CAMINHO TEMPORÁRIO SEGURO
-            temp_path = os.path.join(os.getcwd(), "temp_upload_file")
+            # Salva arquivo temporário
+            ext = ".xlsx" if file.filename.lower().endswith(('.xlsx', '.xls')) else ".csv"
+            temp_filename = f"temp_import_{int(datetime.now().timestamp())}{ext}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+            
             try:
-                # 1. Salva o arquivo no disco (Evita erros de memória/buffer)
-                file.save(temp_path)
-                
+                file.save(filepath)
                 df = None
-                # 2. Tenta ler
-                try:
-                    # Tenta como Excel
-                    df = pd.read_excel(temp_path, engine='openpyxl')
-                except:
-                    # Tenta como CSV
-                    try: df = pd.read_csv(temp_path, encoding='latin1', sep=';', on_bad_lines='skip')
-                    except: df = pd.read_csv(temp_path, encoding='latin1', sep=',', on_bad_lines='skip')
+                
+                # Lógica Inteligente de Leitura
+                if ext == ".xlsx":
+                    print(">>> Lendo Excel...")
+                    # Tenta ler normal (cabeçalho na linha 0)
+                    df = pd.read_excel(filepath, engine='openpyxl')
+                    
+                    # Verifica se achou a coluna. Se não, tenta pular a primeira linha (header=1)
+                    # Isso corrige o problema do arquivo "Relatório de Coletas"
+                    cols = [str(c).strip() for c in df.columns]
+                    if 'ID Cliente' not in cols:
+                        print(">>> Cabeçalho não achado na linha 0. Tentando linha 1...")
+                        df = pd.read_excel(filepath, engine='openpyxl', header=1)
 
-                # 3. Processa
+                else:
+                    # Mesmo processo para CSV
+                    try: df = pd.read_csv(filepath, encoding='latin1', sep=';', on_bad_lines='skip')
+                    except: df = pd.read_csv(filepath, encoding='latin1', sep=',', on_bad_lines='skip')
+                    
+                    cols = [str(c).strip() for c in df.columns]
+                    if 'ID Cliente' not in cols:
+                         # Tenta pular linha no CSV também
+                         try: df = pd.read_csv(filepath, encoding='latin1', sep=';', on_bad_lines='skip', header=1)
+                         except: df = pd.read_csv(filepath, encoding='latin1', sep=',', on_bad_lines='skip', header=1)
+
                 if df is not None:
                     df.columns = [str(c).strip() for c in df.columns]
+                    
                     if 'ID Cliente' not in df.columns:
-                        flash(f'Erro: Coluna "ID Cliente" não achada. Colunas lidas: {list(df.columns)}', 'error')
+                        flash(f'Erro: Coluna "ID Cliente" não encontrada. O sistema tentou ler linha 0 e 1. Colunas lidas: {list(df.columns)}', 'error')
                     else:
+                        # Cruza com o banco
                         with sqlite3.connect(DB_NAME) as conn:
                             conn.row_factory = sqlite3.Row
                             db_clients = conn.execute("SELECT * FROM clients").fetchall()
@@ -185,55 +197,48 @@ def closing():
                                 'db_data': dict(info) if info else None
                             })
                 else:
-                    flash("Não foi possível ler o arquivo (formato inválido).", 'error')
+                    flash("Arquivo ilegível.", 'error')
 
             except Exception as e:
-                flash(f'Erro crítico no arquivo: {e}', 'error')
+                print(f"ERRO: {e}")
+                flash(f'Erro técnico: {e}', 'error')
             finally:
-                # 4. Limpeza: Apaga o arquivo temporário
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
+                if os.path.exists(filepath):
+                    try: os.remove(filepath)
+                    except: pass
                 
     return render_template('index.html', view='closing', processed=processed, user=session.get('user_name'), role=session.get('role'))
 
 @app.route('/generate_excel', methods=['POST'])
 def generate_excel():
-    try:
-        import openpyxl
-        from openpyxl.styles import Font
-    except ImportError:
-        return "Erro: openpyxl não instalado.", 500
-
     data = request.json
     wb = openpyxl.Workbook()
     ws = wb.active
     c, coletas = data['client'], data['coletas']
-    
     ws.append([f"FECHAMENTO {datetime.now().strftime('%B/%Y').upper()}"])
-    ws['A1'].font = Font(bold=True, size=14)
     ws.append(["TRANSER AMBIENTAL LTDA"]); ws.append(["CLIENTE:", c['name']])
     ws.append(["ENDEREÇO:", c['address']]); ws.append(["CONTRATO:", c['contract_num']]); ws.append([])
     ws.append(["Data", "Resíduo", "Kg", "Tipo"])
-    
     total = 0
     for row in coletas:
         qtd = float(row.get('Quantidade', 0))
         total += qtd
         ws.append([row.get('Data'), row.get('Classe do Resíduo'), qtd, "Normal"])
-    
     ws.append(["TOTAL", "", total]); ws.append([])
     ws.append(["Descrição", "Qtd", "Unit", "Total"])
     ws.append(["Pacote", 1, c['contract_val'], c['contract_val']])
     exc = max(0, total - c['contract_limit'])
     ws.append([f"Excedente ({c['contract_limit']}Kg)", exc, c['extra_val'], exc * c['extra_val']])
     ws.append(["TOTAL GERAL", "", "", c['contract_val'] + (exc * c['extra_val'])])
-    
+    ws.column_dimensions['A'].width = 30
     out = BytesIO()
-    wb.save(out)
-    out.seek(0)
+    wb.save(out); out.seek(0)
     return send_file(out, download_name=f"Fechamento_{c['name']}.xlsx", as_attachment=True)
+
+def open_browser():
+    webbrowser.open_new('http://127.0.0.1:5000/')
 
 if __name__ == '__main__':
     init_db()
-    Timer(1, lambda: webbrowser.open_new('http://127.0.0.1:5000/')).start()
+    Timer(1, open_browser).start()
     app.run(debug=True, use_reloader=False)
