@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transer Manager | Python</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
+        .sidebar { height: 100vh; width: 250px; position: fixed; top: 0; left: 0; background-color: #1f2937; color: white; padding-top: 20px; }
+        .main-content { margin-left: 250px; padding: 20px; }
+        .nav-link { color: #9ca3af; padding: 15px 20px; display: flex; align-items: center; text-decoration: none; transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { color: white; background-color: #10b981; }
+        .nav-link i { margin-right: 10px; font-size: 1.2rem; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background: white; }
+        .login-box { width: 400px; margin: 80px auto; padding: 40px; background: white; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .btn-success { background-color: #10b981; border: none; }
+        .btn-success:hover { background-color: #059669; }
+    </style>
+</head>
+<body>
+
+    {% if view == 'login' %}
+    <div class="container">
+        <div class="login-box text-center">
+            <div class="mb-4"><i class="bi bi-recycle text-success" style="font-size: 4rem;"></i></div>
+            <h3 class="mb-4 fw-bold text-dark">Transer Ambiental</h3>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-danger">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <form method="POST" action="/login">
+                <div class="mb-3 text-start">
+                    <label class="form-label text-muted small fw-bold">USUÁRIO</label>
+                    <input type="text" name="username" class="form-control p-3 bg-light border-0" placeholder="admin" required>
+                </div>
+                <div class="mb-4 text-start">
+                    <label class="form-label text-muted small fw-bold">SENHA</label>
+                    <input type="password" name="password" class="form-control p-3 bg-light border-0" placeholder="••••••" required>
+                </div>
+                <button type="submit" class="btn btn-success w-100 py-3 fw-bold rounded-pill shadow-sm">ENTRAR NO SISTEMA</button>
+            </form>
+            <p class="mt-4 text-muted small">Versão Python Local v3.0</p>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h4 class="text-center text-white mb-4 fw-bold">Transer<span class="text-success">Manager</span></h4>
+        <div class="d-flex flex-column">
+            <a href="/" class="nav-link {% if view=='dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i> Visão Geral</a>
+            <a href="/clients" class="nav-link {% if view=='clients' %}active{% endif %}"><i class="bi bi-people"></i> Clientes</a>
+            <a href="/closing" class="nav-link {% if view=='closing' %}active{% endif %}"><i class="bi bi-file-earmark-spreadsheet"></i> Fechamento</a>
+            <a href="/reports" class="nav-link {% if view=='reports' %}active{% endif %}"><i class="bi bi-file-bar-graph"></i> Relatórios</a>
+            
+            {% if role == 'admin' %}
+            <a href="/users" class="nav-link {% if view=='users' %}active{% endif %}"><i class="bi bi-person-gear"></i> Usuários</a>
+            {% endif %}
+            
+            <a href="/logout" class="nav-link text-danger mt-5"><i class="bi bi-box-arrow-left"></i> Sair</a>
+        </div>
+        <div class="mt-auto text-center p-3 text-muted small">
+            Logado como: <strong>{{ user }}</strong>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show shadow-sm">
+                        <i class="bi {{ 'bi-exclamation-triangle-fill' if category == 'error' else 'bi-check-circle-fill' }} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- DASHBOARD -->
+        {% if view == 'dashboard' %}
+        <h2 class="fw-bold text-dark mb-4">Painel de Controle</h2>
+        <div class="row mt-4 g-4">
+            <div class="col-md-4">
+                <div class="card p-4 border-start border-5 border-success h-100" style="cursor:pointer;" onclick="window.location='/closing'">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div><h5 class="fw-bold text-dark">Novo Fechamento</h5><p class="text-muted mb-0 small">Processar CSV</p></div>
+                        <i class="bi bi-upload text-success fs-1"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-4 border-start border-5 border-primary h-100" style="cursor:pointer;" onclick="window.location='/clients'">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div><h5 class="fw-bold text-dark">Clientes</h5><p class="text-muted mb-0 small">Cadastrar contratos</p></div>
+                        <i class="bi bi-people text-primary fs-1"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-4 border-start border-5 border-info h-100" style="cursor:pointer;" onclick="window.location='/reports'">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div><h5 class="fw-bold text-dark">Relatórios</h5><p class="text-muted mb-0 small">Ver histórico</p></div>
+                        <i class="bi bi-bar-chart text-info fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- USUÁRIOS -->
+        {% if view == 'users' %}
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card p-4 shadow-sm">
+                    <h5 class="fw-bold mb-3">Novo Usuário</h5>
+                    <form action="/users" method="POST">
+                        <div class="mb-3"><label>Nome</label><input type="text" name="name" class="form-control" required></div>
+                        <div class="mb-3"><label>Login</label><input type="text" name="username" class="form-control" required></div>
+                        <div class="mb-3"><label>Senha</label><input type="text" name="password" class="form-control" required></div>
+                        <div class="mb-3"><label>Tipo</label>
+                            <select name="role" class="form-select">
+                                <option value="user">Comum (Apenas Relatórios)</option>
+                                <option value="admin">Administrador (Total)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Cadastrar</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card p-0 shadow-sm">
+                    <table class="table table-hover mb-0">
+                        <thead class="bg-light"><tr><th class="p-3">Nome</th><th class="p-3">Login</th><th class="p-3">Tipo</th><th class="p-3 text-end">Ação</th></tr></thead>
+                        <tbody>
+                            {% for u in users %}
+                            <tr>
+                                <td class="p-3">{{ u.name }}</td>
+                                <td class="p-3">{{ u.username }}</td>
+                                <td class="p-3"><span class="badge {{ 'bg-warning text-dark' if u.role == 'admin' else 'bg-info' }}">{{ u.role }}</span></td>
+                                <td class="p-3 text-end">
+                                    <a href="/delete_user/{{ u.id }}" class="text-danger" onclick="return confirm('Remover usuário?')"><i class="bi bi-trash"></i></a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- RELATÓRIOS -->
+        {% if view == 'reports' %}
+        <h2 class="fw-bold text-dark mb-4">Relatórios Gerenciais</h2>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card p-3 bg-primary text-white">
+                    <h3>{{ stats.total }}</h3>
+                    <span>Clientes Cadastrados</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card p-3 bg-success text-white">
+                    <h3>R$ {{ stats.val }}</h3>
+                    <span>Valor Mensal em Contratos</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-0 shadow-sm">
+            <div class="card-header bg-light fw-bold">Lista de Clientes Ativos</div>
+            <table class="table table-hover mb-0">
+                <thead><tr><th class="p-3">Data Cadastro</th><th class="p-3">Cliente</th><th class="p-3">Contrato</th><th class="p-3">Valor</th></tr></thead>
+                <tbody>
+                    {% for c in clients %}
+                    <tr>
+                        <td class="p-3">{{ c.created_at or '-' }}</td>
+                        <td class="p-3">{{ c.name }}</td>
+                        <td class="p-3">{{ c.contract_num }}</td>
+                        <td class="p-3">R$ {{ c.contract_val }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- CLIENTES -->
+        {% if view == 'clients' %}
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="fw-bold text-dark">Gerenciar Clientes</h2>
+            <button class="btn btn-success px-4 rounded-pill fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#clientModal">
+                <i class="bi bi-plus-lg me-2"></i>Novo Cliente
+            </button>
+        </div>
+
+        <div class="card p-0 overflow-hidden shadow-sm">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="p-3 text-secondary small text-uppercase">ID (CSV)</th>
+                        <th class="p-3 text-secondary small text-uppercase">Cliente</th>
+                        <th class="p-3 text-secondary small text-uppercase">Contrato</th>
+                        <th class="p-3 text-secondary small text-uppercase">Pacote</th>
+                        <th class="p-3 text-secondary small text-uppercase text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if not clients %}
+                    <tr><td colspan="5" class="text-center p-5 text-muted">Nenhum cliente cadastrado ainda.</td></tr>
+                    {% endif %}
+                    {% for c in clients %}
+                    <tr>
+                        <td class="p-3 fw-bold text-primary font-monospace">{{ c.external_id }}</td>
+                        <td class="p-3 fw-bold text-dark">{{ c.name }}</td>
+                        <td class="p-3 text-muted">{{ c.contract_num }}</td>
+                        <td class="p-3"><span class="badge bg-light text-dark border">{{ c.contract_limit }}kg</span> <span class="text-success fw-bold small">R$ {{ c.contract_val }}</span></td>
+                        <td class="p-3 text-end">
+                            <button class="btn btn-sm btn-link text-danger p-0" onclick="if(confirm('Remover cliente?')) window.location.href='/delete_client/{{ c.id }}'">
+                                <i class="bi bi-trash fs-5"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Modal Cliente -->
+        <div class="modal fade" id="clientModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content border-0 shadow-lg">
+                    <form action="/clients" method="POST">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title fw-bold">Novo Cliente</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <label class="form-label fw-bold small text-muted">Nome / Razão Social</label>
+                                    <input type="text" name="name" class="form-control bg-light" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold small text-primary">ID no CSV (Meu Resíduo)</label>
+                                    <input type="text" name="external_id" class="form-control border-primary bg-light" placeholder="Ex: 116" required>
+                                </div>
+                                <div class="col-md-6"><label class="form-label small text-muted">CPF/CNPJ</label><input type="text" name="document" class="form-control"></div>
+                                <div class="col-md-6"><label class="form-label small text-muted">Email</label><input type="email" name="email" class="form-control"></div>
+                                <div class="col-12"><label class="form-label small text-muted">Endereço</label><input type="text" name="address" class="form-control"></div>
+                                <div class="col-md-6"><label class="form-label small text-muted">Cidade</label><input type="text" name="city" class="form-control"></div>
+                                <div class="col-md-6"><label class="form-label small text-muted">Nº Contrato</label><input type="text" name="contract_num" class="form-control"></div>
+                                
+                                <div class="col-12 border-top mt-4 pt-3 mb-2"><span class="badge bg-secondary">Financeiro</span></div>
+                                
+                                <div class="col-md-4"><label class="form-label small fw-bold">Valor Pacote (R$)</label><input type="number" step="0.01" name="contract_val" class="form-control" required></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold">Limite (Kg)</label><input type="number" step="0.01" name="contract_limit" class="form-control" required></div>
+                                <div class="col-md-4"><label class="form-label small fw-bold">Valor Extra (R$)</label><input type="number" step="0.01" name="extra_val" class="form-control" required></div>
+                                <div class="col-12">
+                                    <label class="form-label small text-muted">Periodicidade</label>
+                                    <select name="periodicity" class="form-select">
+                                        <option>Mensal</option><option>Semanal</option><option>Quinzenal</option><option>Trimestral</option><option>Semestral</option><option>Ocasional</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light">
+                            <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success fw-bold px-4">Salvar Cliente</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- FECHAMENTO -->
+        {% if view == 'closing' %}
+        <h2 class="fw-bold text-dark mb-4">Fechamento Mensal</h2>
+        
+        <div class="card p-5 mb-4 text-center border-2 border-dashed" style="border-color: #cbd5e1; background-color: #f8fafc;">
+            <form action="/closing" method="POST" enctype="multipart/form-data">
+                <i class="bi bi-cloud-arrow-up text-primary" style="font-size: 4rem;"></i>
+                <h4 class="mt-3 text-dark fw-bold">Upload do Relatório</h4>
+                <p class="text-muted mb-4">Selecione o arquivo CSV gerado pelo sistema "Meu Resíduo"</p>
+                
+                <div class="d-flex justify-content-center">
+                    <input type="file" name="file" class="form-control w-50" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-primary mt-3 px-5 fw-bold rounded-pill shadow-sm">Processar Arquivo</button>
+            </form>
+        </div>
+
+        {% if processed %}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="fw-bold text-dark">Resultados Processados</h4>
+            <span class="badge bg-light text-dark border">{{ processed|length }} clientes encontrados</span>
+        </div>
+        
+        <div class="card p-0 overflow-hidden shadow-sm">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="p-3 ps-4">Cliente</th>
+                        <th class="p-3 text-center">Total Kg</th>
+                        <th class="p-3 text-center">Excedente</th>
+                        <th class="p-3">Valor Final</th>
+                        <th class="p-3 text-end pe-4">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in processed %}
+                    <tr>
+                        <td class="p-3 ps-4">
+                            <div class="fw-bold text-dark">{{ item.name }}</div>
+                            <small class="text-muted font-monospace">ID: {{ item.id }}</small>
+                            {% if item.status != 'OK' %} <span class="badge bg-danger ms-2">Não Cadastrado</span> {% endif %}
+                        </td>
+                        <td class="p-3 text-center fw-bold">{{ item.total_kg }} Kg</td>
+                        <td class="p-3 text-center">
+                            {% if item.excess > 0 %}
+                                <span class="badge bg-danger-subtle text-danger fw-bold">+ {{ item.excess }} Kg</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3 fw-bold text-success fs-5">R$ {{ item.total_final }}</td>
+                        <td class="p-3 text-end pe-4">
+                            {% if item.status == 'OK' %}
+                            <button class="btn btn-primary btn-sm px-3 fw-bold rounded-pill shadow-sm" onclick='downloadExcel({{ item|tojson }})'>
+                                <i class="bi bi-file-earmark-excel me-1"></i> Baixar Excel
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-secondary btn-sm px-3 rounded-pill" onclick="alert('Cadastre este cliente na aba Clientes com o ID {{ item.id }} para poder gerar o Excel.')">
+                                <i class="bi bi-plus-lg me-1"></i> Cadastrar
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        {% endif %}
+
+    </div>
+    {% endif %} <!-- Fechamento do IF do login -->
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function downloadExcel(data) {
+            fetch('/generate_excel', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ client: data.db_data, coletas: data.coletas })
+            })
+            .then(res => {
+                if(res.ok) return res.blob();
+                throw new Error('Erro na rede');
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Fechamento_${data.name}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            })
+            .catch(err => alert('Erro ao gerar Excel: ' + err));
+        }
+    </script>
+</body>
+</html>
